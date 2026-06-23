@@ -6,13 +6,15 @@ exports.getAllMemories = async (req, res) => {
         const [memories] = await db.query(`
             SELECT 
                 m.*,
-                JSON_ARRAYAGG(
-                    JSON_OBJECT(
-                        'id', md.id,
-                        'file_url', md.file_url,
-                        'file_type', md.file_type,
-                        'file_name', md.file_name
-                    )
+                COALESCE(
+                    JSON_ARRAYAGG(
+                        JSON_OBJECT(
+                            'id', md.id,
+                            'file_url', md.file_url,
+                            'file_type', md.file_type,
+                            'file_name', md.file_name
+                        )
+                    ), '[]'
                 ) as media
             FROM memories m
             LEFT JOIN media md ON m.id = md.memory_id
@@ -22,6 +24,7 @@ exports.getAllMemories = async (req, res) => {
 
         res.json(memories);
     } catch (error) {
+        console.error('Error getAllMemories:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -34,13 +37,15 @@ exports.getMemoryById = async (req, res) => {
         const [memory] = await db.query(`
             SELECT 
                 m.*,
-                JSON_ARRAYAGG(
-                    JSON_OBJECT(
-                        'id', md.id,
-                        'file_url', md.file_url,
-                        'file_type', md.file_type,
-                        'file_name', md.file_name
-                    )
+                COALESCE(
+                    JSON_ARRAYAGG(
+                        JSON_OBJECT(
+                            'id', md.id,
+                            'file_url', md.file_url,
+                            'file_type', md.file_type,
+                            'file_name', md.file_name
+                        )
+                    ), '[]'
                 ) as media
             FROM memories m
             LEFT JOIN media md ON m.id = md.memory_id
@@ -54,6 +59,7 @@ exports.getMemoryById = async (req, res) => {
 
         res.json(memory[0]);
     } catch (error) {
+        console.error('Error getMemoryById:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -64,31 +70,20 @@ exports.createMemory = async (req, res) => {
     try {
         await connection.beginTransaction();
 
-        const { tanggal, judul, deskripsi, lokasi, media } = req.body;
+        const { tanggal, judul, deskripsi, lokasi } = req.body;
+
+        // Validasi
+        if (!tanggal || !judul) {
+            return res.status(400).json({ error: 'Tanggal dan judul wajib diisi' });
+        }
 
         // Insert memory
         const [result] = await connection.query(
             'INSERT INTO memories (tanggal, judul, deskripsi, lokasi) VALUES (?, ?, ?, ?)',
-            [tanggal, judul, deskripsi, lokasi]
+            [tanggal, judul, deskripsi || null, lokasi || null]
         );
 
         const memoryId = result.insertId;
-
-        // Insert media if any
-        if (media && media.length > 0) {
-            const mediaValues = media.map(m => [
-                memoryId,
-                m.file_name,
-                m.file_url,
-                m.file_type,
-                m.file_size
-            ]);
-
-            await connection.query(
-                'INSERT INTO media (memory_id, file_name, file_url, file_type, file_size) VALUES ?',
-                [mediaValues]
-            );
-        }
 
         await connection.commit();
 
@@ -99,6 +94,7 @@ exports.createMemory = async (req, res) => {
 
     } catch (error) {
         await connection.rollback();
+        console.error('Error createMemory:', error);
         res.status(500).json({ error: error.message });
     } finally {
         connection.release();
@@ -122,6 +118,7 @@ exports.updateMemory = async (req, res) => {
 
         res.json({ message: 'Memory updated successfully!' });
     } catch (error) {
+        console.error('Error updateMemory:', error);
         res.status(500).json({ error: error.message });
     }
 };
@@ -139,6 +136,7 @@ exports.deleteMemory = async (req, res) => {
 
         res.json({ message: 'Memory deleted successfully!' });
     } catch (error) {
+        console.error('Error deleteMemory:', error);
         res.status(500).json({ error: error.message });
     }
 };
